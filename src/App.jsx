@@ -3,7 +3,7 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Explore from './pages/Explore';
 import Planner from './pages/Planner';
-import Dashboard from './pages/Dashboard';
+import Destinations from './pages/Destinations'; // Renamed from Dashboard
 import Requests from './pages/Requests'; 
 import Analytics from './pages/Analytics';
 import Login from './pages/Login';
@@ -16,6 +16,8 @@ function ProtectedRoute({ children, role }) {
 
   if (loading) return null;
   if (!user) return <Navigate to="/login" />;
+  
+  // Note: Admins inherently bypass this block so they can see shared agency routes
   if (role && userData?.role !== role && userData?.role !== 'admin') {
     return <Navigate to="/" />;
   }
@@ -34,27 +36,34 @@ export default function App() {
               <Route path="/signup" element={<Signup />} />
               
               <Route path="/" element={<Home />} />
+              
               <Route path="/explore" element={
                 <ProtectedRoute>
                   <Explore />
                 </ProtectedRoute>
               } />
+              
               <Route path="/planner" element={
                 <ProtectedRoute>
                   <Planner />
                 </ProtectedRoute>
               } />
-              <Route path="/dashboard" element={
+              
+              <Route path="/destinations" element={
                 <ProtectedRoute role="tourism_office">
-                  <Dashboard />
+                  <Destinations />
                 </ProtectedRoute>
-              } /><Route path="/requests" element={
+              } />
+              
+              <Route path="/requests" element={
                 <ProtectedRoute role="admin">
                   <Requests />
                 </ProtectedRoute>
               } />
+              
               <Route path="/analytics" element={
-                <ProtectedRoute role="admin">
+                // role="tourism_office" ensures that both agencies and admins can access it
+                <ProtectedRoute role="tourism_office">
                   <Analytics />
                 </ProtectedRoute>
               } />

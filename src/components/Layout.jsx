@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-// Added Inbox and BarChart3 for the new Admin links
-import { Home, Map, Calendar, Settings, Menu, X, LogOut, User, Inbox, BarChart3 } from 'lucide-react';
+// Added MapPin for Destinations
+import { Home, Map, Calendar, Menu, X, LogOut, User, Inbox, BarChart3, MapPin } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
 
@@ -20,16 +20,18 @@ export default function Layout({ children }) {
   const navItems = [
     { name: 'Home', path: '/', icon: Home, show: true },
     
-    // Hide Explore and Planner from Admins, show to everyone else logged in
-    { name: 'Explore', path: '/explore', icon: Map, show: !!user && !isAdmin },
-    { name: 'Planner', path: '/planner', icon: Calendar, show: !!user && !isAdmin },
+    // TOURIST ONLY: Hide from Admins and Tourism Offices
+    { name: 'Explore', path: '/explore', icon: Map, show: !!user && !isAdmin && !isTourismOffice },
+    { name: 'Planner', path: '/planner', icon: Calendar, show: !!user && !isAdmin && !isTourismOffice },
     
-    // Dashboard is now exclusively for the Tourism Office
-    { name: 'Dashboard', path: '/dashboard', icon: Settings, show: isTourismOffice },
+    // AGENCY ONLY
+    { name: 'Destinations', path: '/destinations', icon: MapPin, show: isTourismOffice },
     
-    // NEW: Admin-exclusive routes
+    // ADMIN ONLY
     { name: 'Requests', path: '/requests', icon: Inbox, show: isAdmin },
-    { name: 'Analytics', path: '/analytics', icon: BarChart3, show: isAdmin },
+    
+    // SHARED (ADMIN & AGENCY)
+    { name: 'Analytics', path: '/analytics', icon: BarChart3, show: isAdmin || isTourismOffice },
   ];
 
   const visibleNavItems = navItems.filter(item => item.show);
