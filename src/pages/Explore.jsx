@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Search, MapPin, Star, Heart, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+// jericho you add this to imports: User, Mail, Phone, Calendar, Info, X
+import { Search, MapPin, Star, Heart, Loader2, User, Mail, Phone, Calendar, Info, X } from 'lucide-react';
 import { db } from '../db/index';
 
 export default function Explore() {
@@ -9,24 +10,22 @@ export default function Explore() {
   const [destinations, setDestinations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // jericho you add this to state:
+  const [selectedDest, setSelectedDest] = useState(null);
 
   useEffect(() => {
     const fetchDestinations = async () => {
       try {
-        // 1. Try to fetch from the live server
         const response = await fetch('/api/destinations');
         if (!response.ok) throw new Error('Failed to fetch from server');
         
         const data = await response.json();
         setDestinations(data);
-        
-        // 2. Cache the fresh data locally for offline use
-        // bulkPut adds new items and updates existing ones based on _id
         await db.destinations.bulkPut(data); 
 
       } catch (err) {
         console.warn("Offline or server unreachable. Loading from local cache...");
-        // 3. If offline, load from Dexie database
         try {
           const localData = await db.destinations.toArray();
           if (localData.length > 0) {
@@ -127,13 +126,90 @@ export default function Explore() {
               </div>
               <h3 className="mb-2 text-xl font-bold text-emerald-900">{dest.name}</h3>
               <p className="line-clamp-2 text-sm text-emerald-600/80">{dest.description}</p>
-              <button className="mt-4 w-full rounded-xl bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100">
+              
+              {/* jericho you add this to make View Details clickable */}
+              <button 
+                onClick={() => setSelectedDest(dest)}
+                className="mt-4 w-full rounded-xl bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
                 View Details
               </button>
             </div>
           </motion.div>
         ))}
       </section>
+
+      {/* jericho you add this Detail Modal Section */}
+      <AnimatePresence>
+        {selectedDest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedDest(null)}
+              className="absolute inset-0 bg-emerald-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2.5rem] bg-white p-0 shadow-2xl"
+            >
+              <button 
+                onClick={() => setSelectedDest(null)}
+                className="absolute right-6 top-6 z-10 rounded-full bg-black/20 p-2 text-white backdrop-blur-md hover:bg-black/40"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="h-64 w-full">
+                <img src={selectedDest.image} className="h-full w-full object-cover" alt={selectedDest.name} />
+              </div>
+
+              <div className="p-8">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-emerald-900">{selectedDest.name}</h2>
+                  <p className="flex items-center gap-1 text-sm font-semibold text-emerald-600">
+                    <MapPin size={14} /> {selectedDest.region}
+                  </p>
+                </div>
+
+                {/* Uploader Info */}
+                <div className="mb-8 space-y-3 rounded-2xl bg-emerald-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-emerald-800">Posted By</p>
+                  <div className="flex items-center gap-3 text-emerald-700">
+                    <User size={18} />
+                    <span className="text-sm font-medium">{selectedDest.postedBy?.name || 'Local Guide'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-emerald-700">
+                    <Mail size={18} />
+                    <span className="text-sm font-medium">{selectedDest.postedBy?.email || 'contact@lakbai.com'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-emerald-700">
+                    <Phone size={18} />
+                    <span className="text-sm font-medium">{selectedDest.postedBy?.phone || '+63 912 345 6789'}</span>
+                  </div>
+                </div>
+
+                <p className="mb-8 text-emerald-800/80 leading-relaxed">
+                  {selectedDest.description}
+                </p>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-4">
+                  <button className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-800 py-4 font-bold text-white transition-transform hover:scale-[1.02] active:scale-95">
+                    <Calendar size={18} /> Add to Planner
+                  </button>
+                  <button className="flex items-center justify-center gap-2 rounded-2xl border-2 border-emerald-100 bg-white py-4 font-bold text-emerald-800 transition-colors hover:bg-emerald-50">
+                    <Info size={18} /> More on this place
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-emerald-400">
