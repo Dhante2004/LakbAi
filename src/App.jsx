@@ -4,6 +4,8 @@ import Home from './pages/Home';
 import Explore from './pages/Explore';
 import Planner from './pages/Planner';
 import Dashboard from './pages/Dashboard';
+import Requests from './pages/Requests'; 
+import Analytics from './pages/Analytics';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -45,6 +47,15 @@ export default function App() {
               <Route path="/dashboard" element={
                 <ProtectedRoute role="tourism_office">
                   <Dashboard />
+                </ProtectedRoute>
+              } /><Route path="/requests" element={
+                <ProtectedRoute role="admin">
+                  <Requests />
+                </ProtectedRoute>
+              } />
+              <Route path="/analytics" element={
+                <ProtectedRoute role="admin">
+                  <Analytics />
                 </ProtectedRoute>
               } />
             </Routes>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Sparkles, Loader2, Calendar, MapPin, Wallet, Heart, Trash2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { db } from '../db/index';
 
 export default function Planner() {
   const [destination, setDestination] = useState('');
@@ -21,12 +22,24 @@ export default function Planner() {
         const response = await fetch('/api/itineraries', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (response.ok) {
-          const data = await response.json();
-          setSavedItineraries(data);
-        }
+        
+        if (!response.ok) throw new Error('Failed to fetch');
+        
+        const data = await response.json();
+        setSavedItineraries(data);
+        
+        // Cache the fetched itineraries locally
+        await db.itineraries.bulkPut(data);
+
       } catch (err) {
-        console.error("Failed to fetch itineraries:", err);
+        console.warn("Offline. Loading saved itineraries from cache...");
+        // If offline, load the user's itineraries from Dexie
+        try {
+           const localData = await db.itineraries.toArray();
+           setSavedItineraries(localData);
+        } catch (localErr) {
+           console.error("Failed to load local itineraries");
+        }
       } finally {
         setFetching(false);
       }

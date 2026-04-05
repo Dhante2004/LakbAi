@@ -12,6 +12,9 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        devOptions: {
+          enabled: true // <-- Added this to enable PWA in dev mode
+        },
         manifest: {
           name: 'LakbAi - AI Tourism',
           short_name: 'LakbAi',
@@ -19,14 +22,14 @@ export default defineConfig(({mode}) => {
           theme_color: '#2E7D32',
           icons: [
             {
-              src: 'https://picsum.photos/192/192',
+              src: '/icon-192.jpg',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/jpg'
             },
             {
-              src: 'https://picsum.photos/512/512',
+              src: '/icon-512.jpg',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/jpg'
             }
           ]
         }
