@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { BarChart3, Users, MapPin, AlertCircle, Database, ShieldCheck, Plus, Loader2 } from 'lucide-react';
+import { BarChart3, Users, MapPin, AlertCircle, Database, ShieldCheck, Plus, Loader2, Check, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
   const { userData, isAdmin, isTourismOffice } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [pendingDestinations, setPendingDestinations] = useState([]);
   const [newDest, setNewDest] = useState({
     name: '',
     region: 'Luzon',
@@ -21,6 +22,28 @@ export default function Dashboard() {
     { label: 'System Health', value: 'Optimal', icon: ShieldCheck, color: 'bg-purple-50 text-purple-600' },
     { label: 'Shards Active', value: '3 (Region)', icon: Database, color: 'bg-orange-50 text-orange-600' },
   ];
+
+  // 1. Fetch pending destinations when the component loads (if admin)
+  useEffect(() => {
+    const fetchPendingDestinations = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/destinations/pending', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPendingDestinations(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch pending destinations', err);
+      }
+    };
+
+    if (isAdmin) {
+      fetchPendingDestinations();
+    }
+  }, [isAdmin]);
 
   const handleAddDestination = async (e) => {
     e.preventDefault();
@@ -43,13 +66,45 @@ export default function Dashboard() {
 
       setShowForm(false);
       setNewDest({ name: '', region: 'Luzon', description: '', image: '', rating: 4.5 });
-      alert('Destination added successfully!');
-      window.location.reload(); // Refresh to show new data in Explore
+      
+      // 2. Alert changes based on role
+      alert(isAdmin ? 'Destination added and approved!' : 'Submitted! Waiting for Admin approval.');
+      if (isAdmin) window.location.reload(); 
     } catch (err) {
       console.error(err);
       alert('Error adding destination: ' + err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 3. Admin Approval Function
+  const handleApprove = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/destinations/${id}/approve`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setPendingDestinations(prev => prev.filter(d => d._id !== id));
+      alert('Destination Approved!');
+    } catch (err) {
+      alert('Failed to approve');
+    }
+  };
+
+  // 4. Admin Rejection Function
+  const handleReject = async (id) => {
+    if(!window.confirm("Are you sure you want to reject and delete this submission?")) return;
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/destinations/${id}/reject`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setPendingDestinations(prev => prev.filter(d => d._id !== id));
+    } catch (err) {
+      alert('Failed to reject');
     }
   };
 
@@ -170,8 +225,42 @@ export default function Dashboard() {
 
       {/* Main Panels */}
       <div className="grid gap-8 lg:grid-cols-3">
-        {/* Sharding Info */}
         <section className="lg:col-span-2 space-y-6">
+
+          {/* 5. NEW: Pending Approvals UI (Visible only to Admins) */}
+          {isAdmin && pendingDestinations.length > 0 && (
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 shadow-sm">
+              <h2 className="mb-4 flex items-center gap-2 text-xl font-bold text-amber-900">
+                <AlertCircle className="text-amber-600" /> Pending Approvals
+              </h2>
+              <div className="space-y-4">
+                {pendingDestinations.map(dest => (
+                  <div key={dest._id} className="flex flex-col justify-between rounded-xl bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+                    <div>
+                      <h3 className="font-bold text-amber-900">{dest.name}</h3>
+                      <p className="text-xs text-amber-600">Region: {dest.region}</p>
+                    </div>
+                    <div className="mt-4 flex gap-2 sm:mt-0">
+                      <button 
+                        onClick={() => handleReject(dest._id)}
+                        className="flex items-center gap-1 rounded-lg bg-rose-100 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-200"
+                      >
+                        <X size={14} /> Reject
+                      </button>
+                      <button 
+                        onClick={() => handleApprove(dest._id)}
+                        className="flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+                      >
+                        <Check size={14} /> Approve
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sharding Info */}
           <div className="rounded-3xl bg-emerald-900 p-8 text-white">
             <h2 className="mb-4 text-xl font-bold">MongoDB Atlas Sharding Configuration</h2>
             <div className="space-y-4 font-mono text-sm text-emerald-200">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Map, Calendar, Settings, Menu, X, LogOut, User } from 'lucide-react';
+// Added Inbox and BarChart3 for the new Admin links
+import { Home, Map, Calendar, Settings, Menu, X, LogOut, User, Inbox, BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
 
@@ -15,11 +16,20 @@ export default function Layout({ children }) {
     navigate('/login');
   };
 
+  // Dynamically render navigation items based on user role
   const navItems = [
     { name: 'Home', path: '/', icon: Home, show: true },
-    { name: 'Explore', path: '/explore', icon: Map, show: !!user },
-    { name: 'Planner', path: '/planner', icon: Calendar, show: !!user },
-    { name: 'Dashboard', path: '/dashboard', icon: Settings, show: isTourismOffice || isAdmin },
+    
+    // Hide Explore and Planner from Admins, show to everyone else logged in
+    { name: 'Explore', path: '/explore', icon: Map, show: !!user && !isAdmin },
+    { name: 'Planner', path: '/planner', icon: Calendar, show: !!user && !isAdmin },
+    
+    // Dashboard is now exclusively for the Tourism Office
+    { name: 'Dashboard', path: '/dashboard', icon: Settings, show: isTourismOffice },
+    
+    // NEW: Admin-exclusive routes
+    { name: 'Requests', path: '/requests', icon: Inbox, show: isAdmin },
+    { name: 'Analytics', path: '/analytics', icon: BarChart3, show: isAdmin },
   ];
 
   const visibleNavItems = navItems.filter(item => item.show);

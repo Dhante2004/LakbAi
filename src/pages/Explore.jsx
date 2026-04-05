@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Search, MapPin, Star, Heart, Loader2 } from 'lucide-react';
+import { db } from '../db/index';
 
 export default function Explore() {
   const [search, setSearch] = useState('');
@@ -12,12 +13,30 @@ export default function Explore() {
   useEffect(() => {
     const fetchDestinations = async () => {
       try {
+        // 1. Try to fetch from the live server
         const response = await fetch('/api/destinations');
-        if (!response.ok) throw new Error('Failed to fetch destinations');
+        if (!response.ok) throw new Error('Failed to fetch from server');
+        
         const data = await response.json();
         setDestinations(data);
+        
+        // 2. Cache the fresh data locally for offline use
+        // bulkPut adds new items and updates existing ones based on _id
+        await db.destinations.bulkPut(data); 
+
       } catch (err) {
-        setError(err.message);
+        console.warn("Offline or server unreachable. Loading from local cache...");
+        // 3. If offline, load from Dexie database
+        try {
+          const localData = await db.destinations.toArray();
+          if (localData.length > 0) {
+            setDestinations(localData);
+          } else {
+            setError('You are offline and have no cached destinations.');
+          }
+        } catch (localErr) {
+          setError('Failed to load local data.');
+        }
       } finally {
         setLoading(false);
       }

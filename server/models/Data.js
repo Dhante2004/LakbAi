@@ -6,6 +6,11 @@ const destinationSchema = new mongoose.Schema({
   description: { type: String, required: true },
   image: { type: String, required: true },
   rating: { type: Number, default: 0 },
+  status: { type: String, enum: ['pending', 'approved'], default: 'pending' },
+  submittedBy: {
+    name: String,
+    email: String
+  },
   createdAt: { type: Date, default: Date.now }
 });
 

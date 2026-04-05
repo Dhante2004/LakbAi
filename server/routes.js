@@ -95,29 +95,85 @@ router.post('/generate-itinerary', authenticate, async (req, res) => {
   }
 });
 
-// Data Routes
+// ==========================================
+// DATA ROUTES (DESTINATIONS)
+// ==========================================
+
+// 1. Get ALL APPROVED destinations (For tourists & home page)
 router.get('/destinations', async (req, res) => {
   try {
-    const destinations = await Destination.find().sort({ createdAt: -1 });
+    const destinations = await Destination.find({ status: 'approved' }).sort({ createdAt: -1 });
     res.json(destinations);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+// 2. Get PENDING destinations (For Admin Requests page)
+router.get('/destinations/pending', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  try {
+    const pending = await Destination.find({ status: 'pending' }).sort({ createdAt: -1 });
+    res.json(pending);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 3. Create a new destination (With submitter info)
 router.post('/destinations', authenticate, async (req, res) => {
   if (req.user.role !== 'admin' && req.user.role !== 'tourism_office') {
     return res.status(403).json({ message: 'Forbidden' });
   }
 
   try {
-    const destination = new Destination(req.body);
+    const status = req.user.role === 'admin' ? 'approved' : 'pending';
+    
+    const destination = new Destination({ 
+      ...req.body, 
+      status,
+      submittedBy: {
+        name: req.user.name,
+        email: req.user.email
+      }
+    });
+    
     await destination.save();
     res.status(201).json(destination);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// 4. Admin route to APPROVE a destination
+router.patch('/destinations/:id/approve', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  try {
+    const updated = await Destination.findByIdAndUpdate(
+      req.params.id, 
+      { status: 'approved' }, 
+      { new: true }
+    );
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// 5. Admin route to REJECT a destination
+router.delete('/destinations/:id/reject', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
+  try {
+    await Destination.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Rejected and deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ==========================================
+// ITINERARY ROUTES
+// ==========================================
 
 router.get('/itineraries', authenticate, async (req, res) => {
   try {
