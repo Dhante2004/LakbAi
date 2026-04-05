@@ -29,7 +29,10 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// Auth Routes
+// ==========================================
+// AUTH ROUTES
+// ==========================================
+
 router.post('/auth/signup', async (req, res) => {
   const { name, email, password, role, region } = req.body;
   try {
@@ -68,7 +71,10 @@ router.get('/auth/me', authenticate, (req, res) => {
   res.json(req.user);
 });
 
-// Gemini Route
+// ==========================================
+// GEMINI ROUTE
+// ==========================================
+
 router.post('/generate-itinerary', authenticate, async (req, res) => {
   const { destination, days, budget, interests } = req.body;
   
@@ -191,6 +197,53 @@ router.post('/itineraries', authenticate, async (req, res) => {
     res.status(201).json(itinerary);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// ==========================================
+// ANALYTICS ROUTES
+// ==========================================
+
+router.get('/analytics', authenticate, async (req, res) => {
+  // Protect route: only allow admin or tourism_office
+  if (req.user.role !== 'admin' && req.user.role !== 'tourism_office') {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
+  try {
+    // You can use this region to filter DB queries later
+    const region = req.query.region;
+    
+    // Mock data payload for the frontend charts
+    const analyticsData = {
+      monthlyVisits: [
+        { month: 'Jan', visits: 2400 },
+        { month: 'Feb', visits: 1398 },
+        { month: 'Mar', visits: 5800 },
+        { month: 'Apr', visits: 3908 },
+        { month: 'May', visits: 4800 },
+        { month: 'Jun', visits: 3800 },
+        { month: 'Jul', visits: 4300 },
+      ],
+      topDestinations: [
+        { name: 'Hidden Lagoon', visitors: 4500 },
+        { name: 'Twin Beaches', visitors: 3200 },
+        { name: 'Mt. Emerald', visitors: 2800 },
+        { name: 'Historic Ruins', visitors: 1900 },
+        { name: 'City Museum', visitors: 1500 },
+      ],
+      stats: {
+        totalVisitors: '26,306',
+        avgDaily: '842',
+        activeDestinations: '12',
+        peakSeason: 'March'
+      }
+    };
+
+    res.json(analyticsData);
+  } catch (err) {
+    console.error("Error fetching analytics:", err);
+    res.status(500).json({ message: 'Failed to load analytics data' });
   }
 });
 

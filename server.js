@@ -13,19 +13,22 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  // Uses environment PORT if available, otherwise defaults to 3000
+  const PORT = process.env.PORT || 3000;
 
   console.log("Starting LakbAi server...");
 
   // Connect to MongoDB
   await connectDB();
 
+  // Middleware to parse incoming JSON payloads
   app.use(express.json());
 
   // API Routes
+  // This automatically prefixes all endpoints in routes.js with '/api'
   app.use("/api", apiRoutes);
 
-  // Vite middleware for development
+  // Vite middleware for development vs static files for production
   const isProd = process.env.NODE_ENV === "production";
   
   if (!isProd) {
@@ -34,7 +37,7 @@ async function startServer() {
       server: { 
         middlewareMode: true,
         host: '0.0.0.0',
-        port: 3000
+        port: PORT
       },
       appType: "spa",
     });
@@ -42,7 +45,11 @@ async function startServer() {
   } else {
     console.log("Production mode: Serving static files...");
     const distPath = path.join(process.cwd(), "dist");
+    
+    // Serve static assets
     app.use(express.static(distPath));
+    
+    // Catch-all route to serve index.html for Single Page Application (SPA) routing
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
