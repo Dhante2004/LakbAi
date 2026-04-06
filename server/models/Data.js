@@ -1,15 +1,23 @@
 import mongoose from 'mongoose';
 
 const destinationSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  region: { type: String, required: true },
+  name: { type: String, required: true }, 
+  region: { 
+    type: String, 
+    required: true,
+    enum: ['Luzon', 'Visayas', 'Mindanao'], 
+    index: true 
+  }, 
+  address: { type: String },
+  coordinates: { type: String }, 
+  category: { type: String, default: 'Nature' }, 
   description: { type: String, required: true },
-  image: { type: String, required: true },
-  rating: { type: Number, default: 0 },
+  image: { type: String, required: true }, 
   status: { type: String, enum: ['pending', 'approved'], default: 'pending' },
   submittedBy: {
     name: String,
-    email: String
+    email: String,
+    phone: String // NEW: Added phone field
   },
   createdAt: { type: Date, default: Date.now }
 });

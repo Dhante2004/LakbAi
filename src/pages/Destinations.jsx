@@ -1,30 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Edit2, Trash2, MapPin, Image as ImageIcon, AlignLeft, X, Type, Upload, Map, Navigation } from 'lucide-react';
+import { Plus, Edit2, Trash2, MapPin, Image as ImageIcon, AlignLeft, X, Type, Upload, Map, Navigation, Loader2 } from 'lucide-react';
 
 export default function Destinations() {
-  // --- STATE ---
-  const [destinations, setDestinations] = useState([
-    {
-      id: 1,
-      title: 'Hidden Lagoon',
-      location: 'Palawan',
-      address: 'El Nido, Palawan, Philippines',
-      coordinates: '11.1965, 119.3245',
-      description: 'A beautiful secret lagoon surrounded by limestone cliffs.',
-      category: 'Nature',
-      imageUrl: 'https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=500&q=80',
-    }
-  ]);
+  const [destinations, setDestinations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
-  // Added address, coordinates, and imageFile
   const [formData, setFormData] = useState({
     id: null,
     title: '',
-    location: '',
+    region: 'Luzon',
     address: '',
     coordinates: '',
     description: '',
@@ -33,13 +22,41 @@ export default function Destinations() {
     imageFile: null, 
   });
 
-  // --- HANDLERS ---
-  const openModal = (destination = null) => {
-    if (destination) {
-      setFormData({ ...destination, imageFile: null }); // Reset file input when editing
+  useEffect(() => {
+    const fetchDestinations = async () => {
+      try {
+        const response = await fetch('/api/destinations');
+        if (!response.ok) throw new Error('Failed to fetch destinations');
+        
+        const data = await response.json();
+        setDestinations(data);
+      } catch (err) {
+        console.error("Error fetching destinations:", err);
+        setError('Failed to load destinations.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDestinations();
+  }, []);
+
+  const openModal = (dest = null) => {
+    if (dest) {
+      setFormData({ 
+        id: dest._id, 
+        title: dest.name || '', 
+        region: dest.region || 'Luzon', 
+        address: dest.address || '', 
+        coordinates: dest.coordinates || '', 
+        description: dest.description || '', 
+        category: dest.category || 'Nature', 
+        imageUrl: dest.image || '', 
+        imageFile: null 
+      });
       setIsEditing(true);
     } else {
-      setFormData({ id: null, title: '', location: '', address: '', coordinates: '', description: '', category: 'Nature', imageUrl: '', imageFile: null });
+      setFormData({ id: null, title: '', region: 'Luzon', address: '', coordinates: '', description: '', category: 'Nature', imageUrl: '', imageFile: null });
       setIsEditing(false);
     }
     setIsModalOpen(true);
@@ -54,43 +71,125 @@ export default function Destinations() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // New handler specifically for file uploads
+  // UPDATED: Convert the image to a Base64 string so MongoDB can store it permanently
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Create a temporary local URL to preview the image immediately
-      const previewUrl = URL.createObjectURL(file);
-      setFormData((prev) => ({
-        ...prev,
-        imageFile: file,
-        imageUrl: previewUrl 
-      }));
+      const reader = new FileReader();
+      
+      // When the file is finished loading, it converts to a base64 string
+      reader.onloadend = () => {
+        setFormData((prev) => ({
+          ...prev,
+          imageFile: file,
+          imageUrl: reader.result // This is the Base64 string!
+        }));
+      };
+      
+      // Tell the reader to read the file
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Note: In a real app, you would use FormData to append the imageFile and send it to your backend
-    // const submitData = new FormData();
-    // submitData.append('image', formData.imageFile);
-    // submitData.append('title', formData.title);
-    // ...etc
-    
-    if (isEditing) {
-      setDestinations(prev => prev.map(dest => dest.id === formData.id ? formData : dest));
-    } else {
-      const newDest = { ...formData, id: Date.now() }; 
-      setDestinations(prev => [newDest, ...prev]);
+    if (!formData.imageUrl) {
+      alert("Please upload an image before submitting.");
+      return;
     }
-    closeModal();
+
+    const payload = {
+      name: formData.title,
+      region: formData.region, 
+      address: formData.address,
+      coordinates: formData.coordinates,
+      category: formData.category,
+      description: formData.description,
+      image: formData.imageUrl, // This is now a permanent Base64 string
+    };
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (isEditing) {
+        const response = await fetch(`/api/destinations/${formData.id}`, {
+          method: 'PATCH', 
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (response.ok) {
+          const updatedDest = await response.json();
+          setDestinations(prev => prev.map(dest => dest._id === formData.id ? updatedDest : dest));
+          closeModal();
+          alert("Destination updated successfully!");
+        } else {
+          alert("Failed to update destination");
+        }
+      } else {
+        const response = await fetch('/api/destinations', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+          const savedDest = await response.json();
+          setDestinations(prev => [savedDest, ...prev]);
+          closeModal();
+          
+          if (savedDest.status === 'pending') {
+            alert("Success! Your destination has been submitted and is currently PENDING approval. It will appear for everyone once an Admin approves it on the Requests page.");
+          } else {
+            alert("Destination created and published successfully!");
+          }
+        } else {
+          alert("Failed to create destination. Make sure the image size isn't too massive.");
+        }
+      }
+    } catch (err) {
+      console.error("Error saving destination:", err);
+      alert("An error occurred while saving.");
+    }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this destination?')) {
-      setDestinations(prev => prev.filter(dest => dest.id !== id));
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`/api/destinations/${id}`, {
+          method: 'DELETE', 
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          setDestinations(prev => prev.filter(dest => dest._id !== id));
+        } else {
+          alert("Failed to delete destination");
+        }
+      } catch (err) {
+        console.error("Error deleting destination:", err);
+        alert("An error occurred while deleting.");
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-emerald-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -108,8 +207,14 @@ export default function Destinations() {
         </button>
       </div>
 
+      {error && (
+        <div className="rounded-2xl bg-rose-50 p-4 text-center text-rose-600">
+          {error}
+        </div>
+      )}
+
       {/* Destinations Grid */}
-      {destinations.length === 0 ? (
+      {destinations.length === 0 && !error ? (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-emerald-100 bg-white p-12 text-center shadow-xl shadow-emerald-100/50">
           <MapPin size={48} className="mb-4 text-emerald-200" />
           <h3 className="text-xl font-bold text-emerald-900">No destinations yet</h3>
@@ -120,7 +225,7 @@ export default function Destinations() {
           <AnimatePresence>
             {destinations.map((dest) => (
               <motion.div
-                key={dest.id}
+                key={dest._id}
                 layout
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -130,8 +235,8 @@ export default function Destinations() {
               >
                 {/* Image Section */}
                 <div className="relative h-48 w-full shrink-0 bg-emerald-100">
-                  {dest.imageUrl ? (
-                    <img src={dest.imageUrl} alt={dest.title} className="h-full w-full object-cover" />
+                  {dest.image ? (
+                    <img src={dest.image} alt={dest.name} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-emerald-400">
                       <ImageIcon size={48} />
@@ -145,23 +250,28 @@ export default function Destinations() {
                       <Edit2 size={16} />
                     </button>
                     <button 
-                      onClick={() => handleDelete(dest.id)}
+                      onClick={() => handleDelete(dest._id)}
                       className="rounded-full bg-white/90 p-2 text-rose-500 shadow-sm hover:bg-white hover:text-rose-700"
                     >
                       <Trash2 size={16} />
                     </button>
                   </div>
                   <span className="absolute bottom-3 left-3 rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-emerald-800 shadow-sm">
-                    {dest.category}
+                    {dest.category || 'Nature'}
                   </span>
+                  {dest.status === 'pending' && (
+                    <span className="absolute bottom-3 right-3 rounded-full bg-amber-400/90 px-3 py-1 text-xs font-bold text-white shadow-sm">
+                      Pending
+                    </span>
+                  )}
                 </div>
 
                 {/* Content Section */}
                 <div className="flex flex-1 flex-col p-5">
-                  <h3 className="mb-1 text-xl font-bold text-emerald-900">{dest.title}</h3>
+                  <h3 className="mb-1 text-xl font-bold text-emerald-900">{dest.name}</h3>
                   <div className="mb-3 space-y-1">
                     <p className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-                      <MapPin size={12} /> {dest.location}
+                      <MapPin size={12} /> {dest.region}
                     </p>
                     {dest.address && (
                       <p className="flex items-center gap-1 text-xs font-medium text-emerald-500">
@@ -271,14 +381,16 @@ export default function Destinations() {
                   <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm font-bold text-emerald-800">
-                        <MapPin size={16} /> General Location (Region/City)
+                        <MapPin size={16} /> Region
                       </label>
-                      <input 
-                        type="text" required name="location"
-                        value={formData.location} onChange={handleChange}
+                      <select 
+                        name="region" value={formData.region} onChange={handleChange}
                         className="w-full rounded-xl border border-emerald-100 bg-white px-4 py-3 text-emerald-900 focus:border-emerald-500 focus:outline-none"
-                        placeholder="e.g. Palawan"
-                      />
+                      >
+                        <option value="Luzon">Luzon</option>
+                        <option value="Visayas">Visayas</option>
+                        <option value="Mindanao">Mindanao</option>
+                      </select>
                     </div>
                     <div className="space-y-2">
                       <label className="flex items-center gap-2 text-sm font-bold text-emerald-800">

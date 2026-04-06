@@ -22,7 +22,7 @@ async function startServer() {
   await connectDB();
 
   // Middleware to parse incoming JSON payloads
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // API Routes
   // This automatically prefixes all endpoints in routes.js with '/api'

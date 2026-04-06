@@ -1,73 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Users, TrendingUp, MapPin, CalendarDays, Loader2, AlertCircle } from 'lucide-react';
+import { Users, TrendingUp, MapPin, CalendarDays, Loader2, AlertCircle, FileText, Globe, Clock } from 'lucide-react';
 import { 
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { useAuth } from '../context/AuthContext';
 
+const COLORS = ['#059669', '#10b981', '#34d399', '#6ee7b7'];
+
 export default function Analytics() {
   const { userData } = useAuth();
+  const isAdmin = userData?.role === 'admin';
   
-  // --- STATE FOR REAL DATA ---
-  const [analyticsData, setAnalyticsData] = useState({
-    monthlyVisits: [],
-    topDestinations: [],
-    stats: {
-      totalVisitors: '0',
-      avgDaily: '0',
-      activeDestinations: '0',
-      peakSeason: 'N/A'
-    }
-  });
+  const [analyticsData, setAnalyticsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // --- FETCH DATA ---
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
         setLoading(true);
-        setError(null);
-        
-        // Pass the agency's region as a query parameter so the backend filters it
-        const regionQuery = userData?.region ? `?region=${encodeURIComponent(userData.region)}` : '';
-        
-        // Ensure you have an authentication token if your API is protected
         const token = localStorage.getItem('token'); 
-        const headers = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-
-        // Replace this URL with your actual backend endpoint
-        const response = await fetch(`/api/analytics${regionQuery}`, { headers });
+        const response = await fetch('/api/analytics', { 
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
         
-        if (!response.ok) {
-          throw new Error('Failed to load analytics data');
-        }
-        
+        if (!response.ok) throw new Error('Failed to load real DB data.');
         const result = await response.json();
         setAnalyticsData(result);
       } catch (err) {
-        console.error("Analytics fetch error:", err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
-    if (userData) {
-      fetchAnalytics();
-    }
+    if (userData) fetchAnalytics();
   }, [userData]);
 
-  // Custom Tooltip for Recharts to match our Tailwind theme
-  const CustomTooltip = ({ active, payload, label }) => {
+  const CustomLineTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
         <div className="rounded-xl border border-emerald-100 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
           <p className="mb-1 font-bold text-emerald-900">{label}</p>
           <p className="text-sm font-medium text-emerald-600">
-            {payload[0].value.toLocaleString()} visitors
+            {payload[0].value.toLocaleString()} trips planned
           </p>
         </div>
       );
@@ -75,11 +56,25 @@ export default function Analytics() {
     return null;
   };
 
-  if (loading) {
+  const CustomPieTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="rounded-xl border border-emerald-100 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
+          <p className="mb-1 font-bold text-emerald-900">{payload[0].name}</p>
+          <p className="text-sm font-medium text-emerald-600">
+            {payload[0].value} Destinations
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (loading || !analyticsData) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center space-y-4">
         <Loader2 size={40} className="animate-spin text-emerald-600" />
-        <p className="font-medium text-emerald-700">Loading analytics...</p>
+        <p className="font-medium text-emerald-700">Crunching real database numbers...</p>
       </div>
     );
   }
@@ -88,14 +83,8 @@ export default function Analytics() {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center space-y-4 rounded-3xl border border-rose-100 bg-rose-50 p-8 text-center">
         <AlertCircle size={48} className="text-rose-400" />
-        <h2 className="text-xl font-bold text-rose-900">Oops! Something went wrong</h2>
+        <h2 className="text-xl font-bold text-rose-900">Connection Error</h2>
         <p className="text-rose-600">{error}</p>
-        <button 
-          onClick={() => window.location.reload()}
-          className="mt-4 rounded-xl bg-rose-600 px-6 py-2 font-bold text-white shadow-lg shadow-rose-200 transition-transform hover:scale-105"
-        >
-          Try Again
-        </button>
       </div>
     );
   }
@@ -104,50 +93,37 @@ export default function Analytics() {
     <div className="space-y-8">
       {/* Page Header */}
       <div>
-        <h1 className="text-3xl font-bold text-emerald-900">Analytics Dashboard</h1>
+        <h1 className="text-3xl font-bold text-emerald-900">
+          {isAdmin ? 'System Analytics (Real Data)' : 'Regional Analytics'}
+        </h1>
         <p className="text-emerald-600">
-          Viewing tourism performance for <span className="font-bold text-emerald-800">{userData?.region || 'your region'}</span>
+          Viewing live data from MongoDB for <span className="font-bold text-emerald-800">{isAdmin ? 'All Regions' : userData?.region}</span>
         </p>
       </div>
 
-      {/* Quick Stats Grid */}
+      {/* Quick Stats Grid - DIFFERENTIATED BY ROLE FOR RELEVANCE */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard 
-          icon={Users} 
-          label="Total Visitors (YTD)" 
-          value={analyticsData.stats.totalVisitors} 
-          trend="+12.5%" 
-          delay={0} 
-        />
-        <StatCard 
-          icon={TrendingUp} 
-          label="Avg. Daily Visitors" 
-          value={analyticsData.stats.avgDaily} 
-          trend="+5.2%" 
-          delay={0.1} 
-        />
-        <StatCard 
-          icon={MapPin} 
-          label="Active Destinations" 
-          value={analyticsData.stats.activeDestinations} 
-          trend="No change" 
-          trendNeutral 
-          delay={0.2} 
-        />
-        <StatCard 
-          icon={CalendarDays} 
-          label="Peak Season" 
-          value={analyticsData.stats.peakSeason} 
-          trend="Upcoming" 
-          trendNeutral 
-          delay={0.3} 
-        />
+        {isAdmin ? (
+          <>
+            <StatCard icon={Users} label="Registered Users" value={analyticsData.stats.totalUsers} trend="Live DB" delay={0} />
+            <StatCard icon={FileText} label="Total Itineraries Created" value={analyticsData.stats.totalVisitors} trend="Platform Usage" delay={0.1} />
+            <StatCard icon={MapPin} label="Approved Destinations" value={analyticsData.stats.activeDestinations} trend="Live Directory" delay={0.2} />
+            <StatCard icon={Clock} label="Pending Approvals" value={analyticsData.stats.pendingRequests} trend="Needs Review" trendNeutral delay={0.3} />
+          </>
+        ) : (
+          <>
+            <StatCard icon={MapPin} label="Approved Destinations" value={analyticsData.stats.activeDestinations} trend="Live Directory" delay={0} />
+            <StatCard icon={Clock} label="Pending Requests" value={analyticsData.stats.pendingRequests} trend="Waiting Approval" trendNeutral delay={0.1} />
+            <StatCard icon={FileText} label="Itineraries Generated" value={analyticsData.stats.totalVisitors} trend="Regional Usage" delay={0.2} />
+            <StatCard icon={CalendarDays} label="Peak Planning Month" value={analyticsData.stats.peakSeason} trend="Calculated" trendNeutral delay={0.3} />
+          </>
+        )}
       </div>
 
       {/* Charts Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
         
-        {/* Chart 1: Tourist Visits Over Time */}
+        {/* Chart 1: Platform Engagement (Both Roles) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -155,48 +131,32 @@ export default function Analytics() {
           className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-100/50"
         >
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-emerald-900">Tourist Visits (Current Year)</h2>
-            <p className="text-sm text-emerald-600">Monthly foot traffic across all destinations.</p>
+            <h2 className="text-xl font-bold text-emerald-900">Itineraries Generated</h2>
+            <p className="text-sm text-emerald-600">Actual number of trips planned per month.</p>
           </div>
           
           <div className="h-[300px] w-full">
-            {analyticsData.monthlyVisits.length > 0 ? (
+            {analyticsData.stats.totalVisitors > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={analyticsData.monthlyVisits} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#d1fae5" vertical={false} />
-                  <XAxis 
-                    dataKey="month" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#065f46', fontSize: 12, fontWeight: 500 }} 
-                    dy={10}
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#065f46', fontSize: 12 }} 
-                    dx={-10}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line 
-                    type="monotone" 
-                    dataKey="visits" 
-                    stroke="#059669" 
-                    strokeWidth={3}
-                    dot={{ fill: '#059669', strokeWidth: 2, r: 4, stroke: '#fff' }}
-                    activeDot={{ r: 6, strokeWidth: 0 }}
-                  />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#065f46', fontSize: 12, fontWeight: 500 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#065f46', fontSize: 12 }} dx={-10} allowDecimals={false} />
+                  <Tooltip content={<CustomLineTooltip />} />
+                  <Line type="monotone" dataKey="visits" stroke="#059669" strokeWidth={3} dot={{ fill: '#059669', strokeWidth: 2, r: 4, stroke: '#fff' }} activeDot={{ r: 6, strokeWidth: 0 }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-full items-center justify-center text-emerald-400 font-medium">
-                No visit data available yet
+              <div className="flex h-full flex-col items-center justify-center text-emerald-400 font-medium">
+                <FileText size={32} className="mb-2 opacity-50" />
+                <p>No itineraries generated yet.</p>
+                <p className="text-xs opacity-70">Go to Planner and generate one!</p>
               </div>
             )}
           </div>
         </motion.div>
 
-        {/* Chart 2: Top Destinations */}
+        {/* Chart 2: Top Destinations (Both Roles) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -204,8 +164,8 @@ export default function Analytics() {
           className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-100/50"
         >
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-emerald-900">Top Destinations</h2>
-            <p className="text-sm text-emerald-600">Most visited locations in your region.</p>
+            <h2 className="text-xl font-bold text-emerald-900">Trending Destinations</h2>
+            <p className="text-sm text-emerald-600">Most requested locations in the Planner.</p>
           </div>
           
           <div className="h-[300px] w-full">
@@ -213,42 +173,96 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={analyticsData.topDestinations} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#d1fae5" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#065f46', fontSize: 12, fontWeight: 500 }} 
-                    dy={10}
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#065f46', fontSize: 12 }} 
-                    dx={-10}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#ecfdf5' }} />
-                  <Bar 
-                    dataKey="visitors" 
-                    fill="#10b981" 
-                    radius={[6, 6, 0, 0]} 
-                    barSize={40}
-                  />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#065f46', fontSize: 12, fontWeight: 500 }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#065f46', fontSize: 12 }} dx={-10} allowDecimals={false} />
+                  <Tooltip content={<CustomLineTooltip />} cursor={{ fill: '#ecfdf5' }} />
+                  <Bar dataKey="visitors" fill="#10b981" radius={[6, 6, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
               <div className="flex h-full items-center justify-center text-emerald-400 font-medium">
-                No destination data available yet
+                No destination trends available yet.
               </div>
             )}
           </div>
         </motion.div>
 
+        {/* --- ADMIN ONLY CHARTS --- */}
+        {isAdmin && (
+          <>
+            {/* Chart 3: Destinations by Region */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6 }}
+              className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-100/50"
+            >
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-emerald-900">Approved by Region</h2>
+                <p className="text-sm text-emerald-600">Database distribution across the Philippines.</p>
+              </div>
+              
+              <div className="h-[300px] w-full">
+                {analyticsData.destinationsByRegion?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={analyticsData.destinationsByRegion} dataKey="count" nameKey="region" cx="50%" cy="50%" outerRadius={100} innerRadius={60} paddingAngle={5}>
+                        {analyticsData.destinationsByRegion.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomPieTooltip />} />
+                      <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-emerald-400 font-medium">
+                    No approved regions yet.
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Chart 4: Destinations by Category */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-xl shadow-emerald-100/50"
+            >
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-emerald-900">Approved by Category</h2>
+                <p className="text-sm text-emerald-600">Database distribution by spot type.</p>
+              </div>
+              
+              <div className="h-[300px] w-full">
+                {analyticsData.destinationsByCategory?.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={analyticsData.destinationsByCategory} dataKey="count" nameKey="category" cx="50%" cy="50%" outerRadius={100} paddingAngle={2}>
+                        {analyticsData.destinationsByCategory.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[(index + 1) % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomPieTooltip />} />
+                      <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-emerald-400 font-medium">
+                    No approved categories yet.
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// Helper component for the statistic cards at the top
+// Helper component
 function StatCard({ icon: Icon, label, value, trend, trendNeutral, delay }) {
   return (
     <motion.div
