@@ -17,10 +17,18 @@ export default function Layout({ children }) {
 
   const navItems = [
     { name: 'Home', path: '/', icon: Home, show: true },
+    
+    // TOURIST ONLY: Hide from Admins and Tourism Offices
     { name: 'Explore', path: '/explore', icon: Map, show: !!user && !isAdmin && !isTourismOffice },
     { name: 'Planner', path: '/planner', icon: Calendar, show: !!user && !isAdmin && !isTourismOffice },
+    
+    // AGENCY ONLY
     { name: 'Destinations', path: '/destinations', icon: MapPin, show: isTourismOffice },
+    
+    // ADMIN ONLY
     { name: 'Requests', path: '/requests', icon: Inbox, show: isAdmin },
+    
+    // SHARED (ADMIN & AGENCY)
     { name: 'Analytics', path: '/analytics', icon: BarChart3, show: isAdmin || isTourismOffice },
   ];
 

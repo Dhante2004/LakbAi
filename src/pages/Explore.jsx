@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Search, MapPin, Star, Heart, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+// Removed 'Star' from imports
+import { Search, MapPin, Heart, Loader2, User, Mail, Phone, Calendar, Info, X } from 'lucide-react';
 import { db } from '../db/index';
 
 export default function Explore() {
@@ -9,34 +10,51 @@ export default function Explore() {
   const [destinations, setDestinations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  const [selectedDest, setSelectedDest] = useState(null);
 
   useEffect(() => {
     const fetchDestinations = async () => {
       try {
-        // 1. Try to fetch from the live server
+        console.log("1. Starting fetch to /api/destinations...");
         const response = await fetch('/api/destinations');
-        if (!response.ok) throw new Error('Failed to fetch from server');
+        
+        console.log("2. Response status:", response.status);
+        
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error("Server Error details:", errText);
+          throw new Error('Failed to fetch from server');
+        }
         
         const data = await response.json();
+        console.log("3. Data received from server:", data);
+        
+        if (data.length === 0) {
+          console.warn("WARNING: The server returned an empty array []. The database is either empty or no destinations have status: 'approved'.");
+        }
+
         setDestinations(data);
         
-        // 2. Cache the fresh data locally for offline use
-        // bulkPut adds new items and updates existing ones based on _id
+        console.log("4. Attempting to save to local Dexie cache...");
         await db.destinations.bulkPut(data); 
+        console.log("5. Dexie cache updated successfully!");
 
       } catch (err) {
-        console.warn("Offline or server unreachable. Loading from local cache...");
-        // 3. If offline, load from Dexie database
+        console.error("Caught an error in fetchDestinations:", err);
+        setError('Failed to load data. Check console for details.');
+        
+        // Optional offline fallback
         try {
           const localData = await db.destinations.toArray();
           if (localData.length > 0) {
             setDestinations(localData);
-          } else {
-            setError('You are offline and have no cached destinations.');
+            setError(''); // clear error if local data works
           }
         } catch (localErr) {
-          setError('Failed to load local data.');
+          console.error("Local load failed too", localErr);
         }
+
       } finally {
         setLoading(false);
       }
@@ -45,10 +63,16 @@ export default function Explore() {
     fetchDestinations();
   }, []);
 
+  // Make the filter bulletproof against missing database fields
   const filtered = destinations.filter(d => {
-    const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase()) ||
-                         d.description.toLowerCase().includes(search.toLowerCase());
-    const matchesRegion = region === 'All' || d.region === region;
+    // Fallback to empty strings if name or description are missing
+    const safeName = d.name || d.title || 'Unknown';
+    const safeDesc = d.description || '';
+    
+    const matchesSearch = safeName.toLowerCase().includes(search.toLowerCase()) ||
+                         safeDesc.toLowerCase().includes(search.toLowerCase());
+    
+    const matchesRegion = region === 'All' || d.region === region || d.location === region;
     return matchesSearch && matchesRegion;
   });
 
@@ -102,38 +126,121 @@ export default function Explore() {
       <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((dest) => (
           <motion.div 
-            key={dest._id}
+            key={dest._id || dest.id || Math.random()}
             layout
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             className="group overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm transition-all hover:shadow-xl hover:shadow-emerald-100"
           >
-            <div className="relative h-48 overflow-hidden">
+            <div className="relative h-48 overflow-hidden bg-emerald-100">
               <img 
-                src={dest.image} 
-                alt={dest.name}
+                src={dest.image || dest.imageUrl || 'https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=500&q=80'} 
+                alt={dest.name || dest.title || 'Destination'}
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 referrerPolicy="no-referrer"
               />
-              <div className="absolute bottom-4 left-4 flex items-center gap-1 rounded-full bg-black/30 px-2 py-1 text-xs font-bold text-white backdrop-blur-sm">
-                <Star size={12} fill="currentColor" className="text-yellow-400" />
-                {dest.rating}
-              </div>
+              {/* Rating badge removed from here */}
             </div>
             <div className="p-6">
               <div className="mb-2 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-emerald-500">
                 <MapPin size={12} />
-                {dest.region}
+                {dest.region || dest.location || 'Unknown Region'}
               </div>
-              <h3 className="mb-2 text-xl font-bold text-emerald-900">{dest.name}</h3>
-              <p className="line-clamp-2 text-sm text-emerald-600/80">{dest.description}</p>
-              <button className="mt-4 w-full rounded-xl bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100">
+              <h3 className="mb-2 text-xl font-bold text-emerald-900">
+                {dest.name || dest.title || 'Unnamed Destination'}
+              </h3>
+              <p className="line-clamp-2 text-sm text-emerald-600/80">
+                {dest.description || 'No description available.'}
+              </p>
+              
+              <button 
+                onClick={() => setSelectedDest(dest)}
+                className="mt-4 w-full rounded-xl bg-emerald-50 py-3 text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
                 View Details
               </button>
             </div>
           </motion.div>
         ))}
       </section>
+
+      {/* Detail Modal Section */}
+      <AnimatePresence>
+        {selectedDest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedDest(null)}
+              className="absolute inset-0 bg-emerald-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-[2.5rem] bg-white p-0 shadow-2xl"
+            >
+              <button 
+                onClick={() => setSelectedDest(null)}
+                className="absolute right-6 top-6 z-10 rounded-full bg-black/20 p-2 text-white backdrop-blur-md hover:bg-black/40"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="h-64 w-full bg-emerald-100">
+                <img 
+                  src={selectedDest.image || selectedDest.imageUrl || 'https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=500&q=80'} 
+                  className="h-full w-full object-cover" 
+                  alt={selectedDest.name || selectedDest.title} 
+                />
+              </div>
+
+              <div className="p-8">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-emerald-900">
+                    {selectedDest.name || selectedDest.title || 'Unnamed Destination'}
+                  </h2>
+                  <p className="flex items-center gap-1 text-sm font-semibold text-emerald-600">
+                    <MapPin size={14} /> {selectedDest.region || selectedDest.location || 'Unknown Region'}
+                  </p>
+                </div>
+
+                {/* Uploader Info */}
+                <div className="mb-8 space-y-3 rounded-2xl bg-emerald-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-emerald-800">Posted By</p>
+                  <div className="flex items-center gap-3 text-emerald-700">
+                    <User size={18} />
+                    <span className="text-sm font-medium">{selectedDest.submittedBy?.name || 'Local Guide'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-emerald-700">
+                    <Mail size={18} />
+                    <span className="text-sm font-medium">{selectedDest.submittedBy?.email || 'contact@lakbai.com'}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-emerald-700">
+                    <Phone size={18} />
+                    <span className="text-sm font-medium">{selectedDest.submittedBy?.phone || '+63 912 345 6789'}</span>
+                  </div>
+                </div>
+
+                <p className="mb-8 text-emerald-800/80 leading-relaxed">
+                  {selectedDest.description || 'No description available for this destination.'}
+                </p>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-4">
+                  <button className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-800 py-4 font-bold text-white transition-transform hover:scale-[1.02] active:scale-95">
+                    <Calendar size={18} /> Add to Planner
+                  </button>
+                  <button className="flex items-center justify-center gap-2 rounded-2xl border-2 border-emerald-100 bg-white py-4 font-bold text-emerald-800 transition-colors hover:bg-emerald-50">
+                    <Info size={18} /> More on this place
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-emerald-400">

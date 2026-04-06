@@ -10,28 +10,27 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 // Middleware to verify JWT
 const authenticate = async (req, res, next) => {
-  console.log('Authenticate middleware triggered for:', req.path);
-  
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'Unauthorized' });
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const user = await User.findById(decoded.id).select('-password');
-    
     if (!user) return res.status(401).json({ message: 'User not found' });
     
     req.user = user;
     next();
   } catch (err) {
-    console.error('Auth error in authenticate:', err);
     res.status(401).json({ message: 'Invalid token' });
   }
 };
 
-// Auth Routes
+// ==========================================
+// AUTH ROUTES
+// ==========================================
 router.post('/auth/signup', async (req, res) => {
-  const { name, email, password, role, region } = req.body;
+  // NEW: Deconstruct contactNumber from the request body
+  const { name, email, password, role, region, contactNumber } = req.body;
   try {
     const existingUser = await User.findOne({ email });
     if (existingUser) return res.status(400).json({ message: 'Email already exists' });
@@ -39,11 +38,12 @@ router.post('/auth/signup', async (req, res) => {
     const adminEmail = process.env.VITE_ADMIN_EMAIL;
     const finalRole = email.toLowerCase() === adminEmail?.toLowerCase() ? 'admin' : role;
 
-    const user = new User({ name, email, password, role: finalRole, region });
+    // NEW: Save the contactNumber to the database
+    const user = new User({ name, email, password, role: finalRole, region, contactNumber });
     await user.save();
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user: { id: user._id, name, email, role: finalRole, region } });
+    res.status(201).json({ token, user: { id: user._id, name, email, role: finalRole, region, contactNumber } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -58,7 +58,7 @@ router.post('/auth/login', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, region: user.region } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, region: user.region, contactNumber: user.contactNumber } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -68,27 +68,21 @@ router.get('/auth/me', authenticate, (req, res) => {
   res.json(req.user);
 });
 
-// Gemini Route
+// ==========================================
+// GEMINI ROUTE
+// ==========================================
 router.post('/generate-itinerary', authenticate, async (req, res) => {
   const { destination, days, budget, interests } = req.body;
-  
   if (!GEMINI_API_KEY) {
-    return res.json({ 
-      plan: `Mock Itinerary for ${destination} (${days} days):\nDay 1: Arrival and local food tour.\nDay 2: Exploring ${interests.join(", ")} spots.\nDay 3: Relaxation and departure.` 
-    });
+    return res.json({ plan: `Mock Itinerary for ${destination} (${days} days).` });
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Generate a detailed day-by-day tourism itinerary for ${destination} for ${days} days. 
-      Budget level: ${budget}. 
-      Interests: ${interests.join(", ")}.
-      Include tourist spots, local restaurants, and transportation tips.
-      Format as Markdown.`,
+      contents: `Generate a detailed day-by-day tourism itinerary for ${destination} for ${days} days. Budget level: ${budget}. Interests: ${interests.join(", ")}. Format as Markdown.`,
     });
-
     res.json({ plan: response.text || "Failed to generate itinerary." });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -98,8 +92,6 @@ router.post('/generate-itinerary', authenticate, async (req, res) => {
 // ==========================================
 // DATA ROUTES (DESTINATIONS)
 // ==========================================
-
-// 1. Get ALL APPROVED destinations (For tourists & home page)
 router.get('/destinations', async (req, res) => {
   try {
     const destinations = await Destination.find({ status: 'approved' }).sort({ createdAt: -1 });
@@ -109,7 +101,6 @@ router.get('/destinations', async (req, res) => {
   }
 });
 
-// 2. Get PENDING destinations (For Admin Requests page)
 router.get('/destinations/pending', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
@@ -120,7 +111,7 @@ router.get('/destinations/pending', authenticate, async (req, res) => {
   }
 });
 
-// 3. Create a new destination (With submitter info)
+// CREATE DESTINATION
 router.post('/destinations', authenticate, async (req, res) => {
   if (req.user.role !== 'admin' && req.user.role !== 'tourism_office') {
     return res.status(403).json({ message: 'Forbidden' });
@@ -128,16 +119,15 @@ router.post('/destinations', authenticate, async (req, res) => {
 
   try {
     const status = req.user.role === 'admin' ? 'approved' : 'pending';
-    
     const destination = new Destination({ 
       ...req.body, 
       status,
-      submittedBy: {
-        name: req.user.name,
-        email: req.user.email
+      submittedBy: { 
+        name: req.user.name, 
+        email: req.user.email,
+        phone: req.user.contactNumber // NEW: Attaches the agency's phone number!
       }
     });
-    
     await destination.save();
     res.status(201).json(destination);
   } catch (err) {
@@ -145,22 +135,16 @@ router.post('/destinations', authenticate, async (req, res) => {
   }
 });
 
-// 4. Admin route to APPROVE a destination
 router.patch('/destinations/:id/approve', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
-    const updated = await Destination.findByIdAndUpdate(
-      req.params.id, 
-      { status: 'approved' }, 
-      { new: true }
-    );
+    const updated = await Destination.findByIdAndUpdate(req.params.id, { status: 'approved' }, { new: true });
     res.json(updated);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-// 5. Admin route to REJECT a destination
 router.delete('/destinations/:id/reject', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {
@@ -171,10 +155,27 @@ router.delete('/destinations/:id/reject', authenticate, async (req, res) => {
   }
 });
 
+router.delete('/destinations/:id', authenticate, async (req, res) => {
+  try {
+    await Destination.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.patch('/destinations/:id', authenticate, async (req, res) => {
+  try {
+    const updated = await Destination.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ==========================================
 // ITINERARY ROUTES
 // ==========================================
-
 router.get('/itineraries', authenticate, async (req, res) => {
   try {
     const itineraries = await Itinerary.find({ userId: req.user._id }).sort({ createdAt: -1 });
@@ -191,6 +192,121 @@ router.post('/itineraries', authenticate, async (req, res) => {
     res.status(201).json(itinerary);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/itineraries/:id', authenticate, async (req, res) => {
+  try {
+    await Itinerary.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ==========================================
+// 100% REAL MONGODB ANALYTICS
+// ==========================================
+router.get('/analytics', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'tourism_office') {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
+  try {
+    const isAdmin = req.user.role === 'admin';
+    const targetRegion = isAdmin ? null : req.user.region;
+
+    const destQuery = { status: 'approved' };
+    if (targetRegion) destQuery.region = targetRegion;
+    const activeDestinationsCount = await Destination.countDocuments(destQuery);
+
+    const pendingQuery = { status: 'pending' };
+    if (targetRegion) pendingQuery.region = targetRegion;
+    const pendingDestinationsCount = await Destination.countDocuments(pendingQuery);
+
+    const totalUsersCount = await User.countDocuments();
+
+    let itineraryMatch = {};
+    if (targetRegion) {
+       const dests = await Destination.find({ region: targetRegion }).select('name');
+       const destNames = dests.map(d => d.name);
+       itineraryMatch = { destination: { $in: destNames } };
+    }
+    const totalItinerariesCount = await Itinerary.countDocuments(itineraryMatch);
+
+    const topDestinationsAgg = await Itinerary.aggregate([
+      { $match: itineraryMatch },
+      { $group: { _id: "$destination", visitors: { $sum: 1 } } },
+      { $sort: { visitors: -1 } },
+      { $limit: 5 },
+      { $project: { name: "$_id", visitors: 1, _id: 0 } }
+    ]);
+
+    const currentYear = new Date().getFullYear();
+    const monthlyMatch = {
+       ...itineraryMatch,
+       createdAt: {
+         $gte: new Date(`${currentYear}-01-01`),
+         $lte: new Date(`${currentYear}-12-31`)
+       }
+    };
+
+    const monthlyVisitsAgg = await Itinerary.aggregate([
+      { $match: monthlyMatch },
+      { $group: { _id: { $month: "$createdAt" }, visits: { $sum: 1 } } },
+      { $sort: { "_id": 1 } }
+    ]);
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let monthlyVisits = monthNames.map((month) => ({ month, visits: 0 }));
+    let peakMonthValue = 0;
+    let peakSeason = 'N/A';
+
+    monthlyVisitsAgg.forEach(item => {
+      const monthIndex = item._id - 1;
+      monthlyVisits[monthIndex].visits = item.visits;
+      if (item.visits > peakMonthValue) {
+        peakMonthValue = item.visits;
+        peakSeason = monthNames[monthIndex];
+      }
+    });
+
+    const avgDaily = Math.ceil(totalItinerariesCount / 30) || 0;
+
+    let destinationsByRegion = [];
+    let destinationsByCategory = [];
+    
+    if (isAdmin) {
+      destinationsByRegion = await Destination.aggregate([
+        { $match: { status: 'approved' } },
+        { $group: { _id: "$region", count: { $sum: 1 } } },
+        { $project: { region: { $ifNull: ["$_id", "Unspecified"] }, count: 1, _id: 0 } }
+      ]);
+
+      destinationsByCategory = await Destination.aggregate([
+        { $match: { status: 'approved' } },
+        { $group: { _id: "$category", count: { $sum: 1 } } },
+        { $project: { category: { $ifNull: ["$_id", "Uncategorized"] }, count: 1, _id: 0 } }
+      ]);
+    }
+
+    res.json({
+      stats: {
+        totalVisitors: totalItinerariesCount.toString(),
+        avgDaily: avgDaily.toString(),
+        activeDestinations: activeDestinationsCount.toString(),
+        peakSeason: peakSeason,
+        pendingRequests: pendingDestinationsCount.toString(),
+        totalUsers: totalUsersCount.toString()
+      },
+      monthlyVisits,
+      topDestinations: topDestinationsAgg,
+      destinationsByRegion,
+      destinationsByCategory
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to load analytics data' });
   }
 });
 
