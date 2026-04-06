@@ -1,12 +1,10 @@
+import 'dotenv/config'; // This MUST be the very first line!
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import dotenv from "dotenv";
 import apiRoutes from './server/routes.js';
 import { connectDB } from './server/db.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

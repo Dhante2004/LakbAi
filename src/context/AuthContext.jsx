@@ -6,53 +6,64 @@ const AuthContext = createContext();
 const getCachedUser = () => {
   try {
     const cached = localStorage.getItem('user');
-    return cached ? JSON.parse(cached) : null;
+    // Prevent parsing the literal string "undefined" which crashes the auth state
+    if (cached && cached !== 'undefined' && cached !== 'null') {
+      return JSON.parse(cached);
+    }
+    return null;
   } catch {
     return null;
   }
 };
 
 export function AuthProvider({ children }) {
-  // 1. Initialize state directly from the cache
   const [user, setUser] = useState(getCachedUser);
   const [userData, setUserData] = useState(getCachedUser);
   
-  // 2. If we already have a cached user, we don't need to show a loading screen
-  const [loading, setLoading] = useState(!getCachedUser());
+  // Always start loading as true to prevent flashing protected pages before we check
+  const [loading, setLoading] = useState(true); 
 
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('token');
 
-      if (token) {
-        try {
-          const response = await fetch('/api/auth/me', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setUser(data);
-            setUserData(data);
-            // Refresh the cache when online
-            localStorage.setItem('user', JSON.stringify(data));
-          } else if (response.status === 401) {
-            // 3. ONLY log out if the server explicitly says the token is expired/invalid.
-            // This prevents logging out during 503/504 offline errors.
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            setUser(null);
-            setUserData(null);
-          }
-        } catch (err) {
-          // 4. Network completely disconnected. 
-          // We do nothing here, allowing the cached user to keep them logged in.
-          console.warn("Network error during auth check, relying on cached user.");
-        }
+      // If there is no token at all, clear everything to be safe
+      if (!token || token === 'undefined' || token === 'null') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        setUserData(null);
+        setLoading(false);
+        return;
       }
-      setLoading(false);
+
+      try {
+        const response = await fetch('/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data);
+          setUserData(data);
+          localStorage.setItem('user', JSON.stringify(data));
+        } else if (response.status === 401) {
+          // 401 means the token expired, or the JWT_SECRET changed. 
+          // We MUST log the user out so they can get a fresh, valid token.
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+          setUserData(null);
+        }
+      } catch (err) {
+        // Network completely disconnected. Rely on cache.
+        console.warn("Network error during auth check, relying on cached user.");
+      } finally {
+        // Always stop loading whether it succeeds, fails, or catches an error
+        setLoading(false); 
+      }
     };
 
     checkAuth();
