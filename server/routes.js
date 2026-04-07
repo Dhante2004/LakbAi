@@ -143,6 +143,35 @@ router.post('/destinations', authenticate, async (req, res) => {
   }
 });
 
+// ==========================================
+// RATE DESTINATION ROUTE
+// ==========================================
+router.post('/destinations/:id/rate', authenticate, async (req, res) => {
+  try {
+    const { rating } = req.body;
+    const dest = await Destination.findById(req.params.id);
+    
+    if (!dest) return res.status(404).json({ message: 'Destination not found' });
+
+    // Failsafe: Ensure the ratings array exists
+    if (!dest.ratings) dest.ratings = [];
+
+    // Check if this user already rated
+    const existingRatingIndex = dest.ratings.findIndex(r => r.userId === req.user._id.toString());
+    
+    if (existingRatingIndex >= 0) {
+      dest.ratings[existingRatingIndex].value = rating; // Update existing
+    } else {
+      dest.ratings.push({ userId: req.user._id.toString(), value: rating }); // Add new
+    }
+    
+    await dest.save();
+    res.json(dest);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.patch('/destinations/:id/approve', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin only' });
   try {

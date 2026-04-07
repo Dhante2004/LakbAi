@@ -17,8 +17,12 @@ const destinationSchema = new mongoose.Schema({
   submittedBy: {
     name: String,
     email: String,
-    phone: String // NEW: Added phone field
+    phone: String
   },
+  ratings: [{
+    userId: { type: String, required: true },
+    value: { type: Number, required: true, min: 1, max: 5 }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 
