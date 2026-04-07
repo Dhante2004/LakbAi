@@ -29,7 +29,6 @@ const authenticate = async (req, res, next) => {
 // AUTH ROUTES
 // ==========================================
 router.post('/auth/signup', async (req, res) => {
-  // NEW: Deconstruct contactNumber from the request body
   const { name, email, password, role, region, contactNumber } = req.body;
   try {
     const existingUser = await User.findOne({ email });
@@ -38,7 +37,6 @@ router.post('/auth/signup', async (req, res) => {
     const adminEmail = process.env.VITE_ADMIN_EMAIL;
     const finalRole = email.toLowerCase() === adminEmail?.toLowerCase() ? 'admin' : role;
 
-    // NEW: Save the contactNumber to the database
     const user = new User({ name, email, password, role: finalRole, region, contactNumber });
     await user.save();
 
@@ -69,23 +67,34 @@ router.get('/auth/me', authenticate, (req, res) => {
 });
 
 // ==========================================
-// GEMINI ROUTE
+// GEMINI ROUTE (LIVE STREAMING)
 // ==========================================
 router.post('/generate-itinerary', authenticate, async (req, res) => {
   const { destination, days, budget, interests } = req.body;
   if (!GEMINI_API_KEY) {
-    return res.json({ plan: `Mock Itinerary for ${destination} (${days} days).` });
+    return res.status(400).write("Error: Please add your GEMINI_API_KEY to your .env file.");
   }
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Transfer-Encoding', 'chunked');
 
   try {
     const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Generate a detailed day-by-day tourism itinerary for ${destination} for ${days} days. Budget level: ${budget}. Interests: ${interests.join(", ")}. Format as Markdown.`,
+    const responseStream = await ai.models.generateContentStream({
+      model: "gemini-2.5-flash",
+      contents: `You are an expert travel planner. Create a detailed day-by-day itinerary for ${destination} for ${days} days. Budget level: ${budget}. Interests: ${interests.join(", ")}. Use standard Markdown format for structure.`,
     });
-    res.json({ plan: response.text || "Failed to generate itinerary." });
+
+    for await (const chunk of responseStream) {
+      if (chunk.text) {
+        res.write(chunk.text);
+      }
+    }
+    res.end();
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error(err);
+    res.write("\n\nFailed to complete the itinerary generation.");
+    res.end();
   }
 });
 
@@ -111,7 +120,6 @@ router.get('/destinations/pending', authenticate, async (req, res) => {
   }
 });
 
-// CREATE DESTINATION
 router.post('/destinations', authenticate, async (req, res) => {
   if (req.user.role !== 'admin' && req.user.role !== 'tourism_office') {
     return res.status(403).json({ message: 'Forbidden' });
@@ -125,11 +133,40 @@ router.post('/destinations', authenticate, async (req, res) => {
       submittedBy: { 
         name: req.user.name, 
         email: req.user.email,
-        phone: req.user.contactNumber // NEW: Attaches the agency's phone number!
+        phone: req.user.contactNumber
       }
     });
     await destination.save();
     res.status(201).json(destination);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ==========================================
+// RATE DESTINATION ROUTE
+// ==========================================
+router.post('/destinations/:id/rate', authenticate, async (req, res) => {
+  try {
+    const { rating } = req.body;
+    const dest = await Destination.findById(req.params.id);
+    
+    if (!dest) return res.status(404).json({ message: 'Destination not found' });
+
+    // Failsafe: Ensure the ratings array exists
+    if (!dest.ratings) dest.ratings = [];
+
+    // Check if this user already rated
+    const existingRatingIndex = dest.ratings.findIndex(r => r.userId === req.user._id.toString());
+    
+    if (existingRatingIndex >= 0) {
+      dest.ratings[existingRatingIndex].value = rating; // Update existing
+    } else {
+      dest.ratings.push({ userId: req.user._id.toString(), value: rating }); // Add new
+    }
+    
+    await dest.save();
+    res.json(dest);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -174,7 +211,7 @@ router.patch('/destinations/:id', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// ITINERARY ROUTES
+// ITINERARY ROUTES (CRUD)
 // ==========================================
 router.get('/itineraries', authenticate, async (req, res) => {
   try {
@@ -195,6 +232,22 @@ router.post('/itineraries', authenticate, async (req, res) => {
   }
 });
 
+router.put('/itineraries/:id', authenticate, async (req, res) => {
+  const { destination, days, budget, interests, content } = req.body; 
+  try {
+    const updatedItinerary = await Itinerary.findByIdAndUpdate(
+      req.params.id,
+      { destination, days, budget, interests, content },
+      { new: true }
+    );
+    
+    if (!updatedItinerary) return res.status(404).json({ message: 'Itinerary not found' });
+    res.json(updatedItinerary);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.delete('/itineraries/:id', authenticate, async (req, res) => {
   try {
     await Itinerary.findByIdAndDelete(req.params.id);
@@ -205,7 +258,7 @@ router.delete('/itineraries/:id', authenticate, async (req, res) => {
 });
 
 // ==========================================
-// 100% REAL MONGODB ANALYTICS
+// MONGODB ANALYTICS
 // ==========================================
 router.get('/analytics', authenticate, async (req, res) => {
   if (req.user.role !== 'admin' && req.user.role !== 'tourism_office') {

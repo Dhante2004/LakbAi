@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({mode}) => {
@@ -13,7 +13,13 @@ export default defineConfig(({mode}) => {
       VitePWA({
         registerType: 'autoUpdate',
         devOptions: {
-          enabled: true // <-- Added this to enable PWA in dev mode
+          enabled: true 
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg}'],
+          navigateFallback: '/index.html',
+          // NEW: Increase cache limit to 30MB to allow your massive hero-bg.jpg to be cached
+          maximumFileSizeToCacheInBytes: 30000000, 
         },
         manifest: {
           name: 'LakbAi - AI Tourism',
@@ -47,7 +53,7 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true',
       proxy: {
         '/api': {
-          target: 'http://localhost:3000', // change to your backend port if different
+          target: 'http://localhost:3000', 
           changeOrigin: true,
         }
       }
