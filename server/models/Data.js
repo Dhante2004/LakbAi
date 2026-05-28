@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const destinationSchema = new mongoose.Schema({
+export const destinationSchema = new mongoose.Schema({
   name: { type: String, required: true }, 
   region: { 
     type: String, 
@@ -25,8 +25,6 @@ const destinationSchema = new mongoose.Schema({
   }],
   createdAt: { type: Date, default: Date.now }
 });
-
-export const Destination = mongoose.model('Destination', destinationSchema);
 
 const itinerarySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

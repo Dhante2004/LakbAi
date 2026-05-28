@@ -1,4 +1,4 @@
-import 'dotenv/config'; // This MUST be the very first line!
+import 'dotenv/config'; 
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
@@ -19,14 +19,16 @@ async function startServer() {
   // Connect to MongoDB
   await connectDB();
 
-  // Middleware to parse incoming JSON payloads
   app.use(express.json({ limit: '10mb' }));
 
   // API Routes
-  // This automatically prefixes all endpoints in routes.js with '/api'
   app.use("/api", apiRoutes);
 
-  // Vite middleware for development vs static files for production
+  app.get('/api-docs', (req, res) => {
+    // Points to the api-docs.html file inside your public folder
+    res.sendFile(path.join(process.cwd(), 'public', 'api-docs.html'));
+  });
+
   const isProd = process.env.NODE_ENV === "production";
   
   if (!isProd) {

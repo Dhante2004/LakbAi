@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LakbAi API Documentation</title>
+  <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
+  <style>
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = function() {
+      // The OpenAPI Specification for LakbAi Backend
+      const spec = {
+        "openapi": "3.0.0",
+        "info": {
+          "title": "LakbAi API",
+          "description": "Interactive API documentation for the LakbAi Backend. You can test endpoints directly from here.",
+          "version": "1.0.0"
+        },
+        "servers": [
+          {
+            "url": "http://localhost:3000/api",
+            "description": "Local Development Server"
+          }
+        ],
+        "components": {
+          "securitySchemes": {
+            "bearerAuth": {
+              "type": "http",
+              "scheme": "bearer",
+              "bearerFormat": "JWT"
+            }
+          }
+        },
+        "security": [
+          { "bearerAuth": [] }
+        ],
+        "paths": {
+          "/auth/signup": {
+            "post": {
+              "tags": ["Authentication"],
+              "summary": "Register a new user",
+              "security": [],
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "email": { "type": "string" },
+                        "password": { "type": "string" },
+                        "role": { "type": "string", "enum": ["tourist", "tourism_office", "admin"] },
+                        "region": { "type": "string", "enum": ["Luzon", "Visayas", "Mindanao"] },
+                        "contactNumber": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": { "201": { "description": "User created" } }
+            }
+          },
+          "/auth/login": {
+            "post": {
+              "tags": ["Authentication"],
+              "summary": "Login to get JWT token",
+              "security": [],
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "email": { "type": "string" },
+                        "password": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": { "200": { "description": "Successful login" } }
+            }
+          },
+          "/auth/me": {
+            "get": {
+              "tags": ["Authentication"],
+              "summary": "Get current user profile",
+              "responses": { "200": { "description": "User profile data" } }
+            }
+          },
+          "/generate-itinerary": {
+            "post": {
+              "tags": ["AI"],
+              "summary": "Generate AI itinerary (Streams response)",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "destination": { "type": "string" },
+                        "days": { "type": "number" },
+                        "budget": { "type": "string" },
+                        "interests": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": { "200": { "description": "Streamed Markdown content" } }
+            }
+          },
+          "/destinations": {
+            "get": {
+              "tags": ["Destinations"],
+              "summary": "Get all approved destinations",
+              "security": [],
+              "responses": { "200": { "description": "List of destinations" } }
+            },
+            "post": {
+              "tags": ["Destinations"],
+              "summary": "Submit a new destination (Admin/Tourism Office)",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "name": { "type": "string" },
+                        "region": { "type": "string", "enum": ["Luzon", "Visayas", "Mindanao"] },
+                        "description": { "type": "string" },
+                        "image": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": { "201": { "description": "Destination created/pending" } }
+            }
+          },
+          "/destinations/pending": {
+            "get": {
+              "tags": ["Destinations"],
+              "summary": "Get pending destinations (Admin only)",
+              "responses": { "200": { "description": "List of pending destinations" } }
+            }
+          },
+          "/destinations/{id}/rate": {
+            "post": {
+              "tags": ["Destinations"],
+              "summary": "Rate a destination",
+              "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": { "rating": { "type": "number", "minimum": 1, "maximum": 5 } }
+                    }
+                  }
+                }
+              },
+              "responses": { "200": { "description": "Rated successfully" } }
+            }
+          },
+          "/destinations/{id}/approve": {
+            "patch": {
+              "tags": ["Destinations"],
+              "summary": "Approve destination (Admin only)",
+              "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+              "responses": { "200": { "description": "Approved" } }
+            }
+          },
+          "/destinations/{id}/reject": {
+            "delete": {
+              "tags": ["Destinations"],
+              "summary": "Reject destination (Admin only)",
+              "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+              "responses": { "200": { "description": "Rejected" } }
+            }
+          },
+          "/itineraries": {
+            "get": {
+              "tags": ["Itineraries"],
+              "summary": "Get user's saved itineraries",
+              "responses": { "200": { "description": "List of itineraries" } }
+            },
+            "post": {
+              "tags": ["Itineraries"],
+              "summary": "Save a new itinerary",
+              "requestBody": {
+                "required": true,
+                "content": {
+                  "application/json": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "destination": { "type": "string" },
+                        "days": { "type": "number" },
+                        "budget": { "type": "string" },
+                        "content": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              "responses": { "201": { "description": "Itinerary saved" } }
+            }
+          },
+          "/itineraries/{id}": {
+            "delete": {
+              "tags": ["Itineraries"],
+              "summary": "Delete a saved itinerary",
+              "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+              "responses": { "200": { "description": "Deleted" } }
+            }
+          },
+          "/analytics": {
+            "get": {
+              "tags": ["Analytics"],
+              "summary": "Get dashboard analytics (Admin/Tourism Office)",
+              "responses": { "200": { "description": "Analytics data object" } }
+            }
+          }
+        }
+      };
+
+      // Initialize Swagger UI
+      window.ui = SwaggerUIBundle({
+        spec: spec,
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIBundle.SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout"
+      });
+    };
+  </script>
+</body>
+</html>
